@@ -85,7 +85,8 @@ def setup_lm_eval_parser():
         help="Tasks to run",
         default=["hellaswag", "lambada_openai", "piqa", "winogrande"],
     )
-    parser.add_argument("--limit_iters", type=int, help="limit examples to run that many iterations", default=None)
+    parser.add_argument("--limit_iters", type=float, help="limit examples to run that many iterations", default=None)
+    parser.add_argument("--metrics", action = "store_true", help = "Store metrics per query",)
     args = setup_parser(parser)
 
     return args
@@ -184,7 +185,6 @@ class HabanaModelAdapter(lm_eval.base.BaseLM):
             padding_length = bucket_length - seq_length
             inps = F.pad(inps, (0, padding_length), value=self.model.config.pad_token_id)
         logits = self.model(inps.to(self._device), **self.model_inputs)["logits"].cpu()
-
         if self.options.static_shapes and padding_length > 0:
             logits = logits[:, :-padding_length, :]
         logits = logits.to(torch.float32)
@@ -201,7 +201,8 @@ def main():
 
     eval_start = time.perf_counter()
     with torch.no_grad():
-        results = lm_eval.evaluator.evaluate(lm, lm_tasks, limit=args.limit_iters)
+        results = lm_eval.evaluator.evaluate(lm, lm_tasks, limit=args.limit_iters, write_out=args.metrics and args.local_rank==0, output_base_path=os.path.dirname(args.output_file))
+
     if args.device == "hpu":
         import habana_frameworks.torch.hpu as torch_hpu
 
